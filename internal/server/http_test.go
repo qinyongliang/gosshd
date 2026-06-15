@@ -26,6 +26,25 @@ func TestRunSHUsesRunDownloadFlow(t *testing.T) {
 	}
 }
 
+func TestRunSHDefaultsToRequestHost(t *testing.T) {
+	app := NewApp(Config{})
+	req := httptest.NewRequest(http.MethodGet, "http://lan.example.test:8080/run.sh", nil)
+	rec := httptest.NewRecorder()
+
+	app.runSH(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if !strings.Contains(body, "http://lan.example.test:8080/download/agent/${os}/${arch}") {
+		t.Fatalf("run.sh did not use request host for download URL:\n%s", body)
+	}
+	if !strings.Contains(body, `exec "$tmp" --server "http://lan.example.test:8080"`) {
+		t.Fatalf("run.sh did not use request host for server URL:\n%s", body)
+	}
+}
+
 func TestRunPS1UsesRunDownloadFlow(t *testing.T) {
 	app := NewApp(Config{PublicHost: "relay.example.com"})
 	req := httptest.NewRequest(http.MethodGet, "http://relay.example.com/run.ps1", nil)
@@ -42,5 +61,24 @@ func TestRunPS1UsesRunDownloadFlow(t *testing.T) {
 	}
 	if !strings.Contains(body, `& $tmp --server "http://relay.example.com"`) {
 		t.Fatalf("run.ps1 did not execute agent with expected server:\n%s", body)
+	}
+}
+
+func TestRunPS1DefaultsToRequestHost(t *testing.T) {
+	app := NewApp(Config{})
+	req := httptest.NewRequest(http.MethodGet, "http://lan.example.test:8080/run.ps1", nil)
+	rec := httptest.NewRecorder()
+
+	app.runPS1(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if !strings.Contains(body, `$url = "http://lan.example.test:8080/download/agent/windows/$arch"`) {
+		t.Fatalf("run.ps1 did not use request host for download URL:\n%s", body)
+	}
+	if !strings.Contains(body, `& $tmp --server "http://lan.example.test:8080"`) {
+		t.Fatalf("run.ps1 did not use request host for server URL:\n%s", body)
 	}
 }

@@ -30,13 +30,13 @@ Start the public server with the latest GitHub Release binary:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/qinyongliang/gosshd/main/run.sh | \
-  sudo sh -s -- --http-listen :80 --ssh-listen :22 --public-host public-host
+  sudo sh -s -- --http-listen :80 --ssh-listen :22
 ```
 
 Windows:
 
 ```powershell
-$run = "$env:TEMP\gosshd-run.ps1"; iwr -UseBasicParsing https://raw.githubusercontent.com/qinyongliang/gosshd/main/run.ps1 -OutFile $run; powershell -NoProfile -ExecutionPolicy Bypass -File $run --http-listen :80 --ssh-listen :22 --public-host public-host
+$run = "$env:TEMP\gosshd-run.ps1"; iwr -UseBasicParsing https://raw.githubusercontent.com/qinyongliang/gosshd/main/run.ps1 -OutFile $run; powershell -NoProfile -ExecutionPolicy Bypass -File $run --http-listen :80 --ssh-listen :22
 ```
 
 Start an agent on a private Linux/macOS host:

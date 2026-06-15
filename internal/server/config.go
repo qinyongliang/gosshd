@@ -15,10 +15,7 @@ type Config struct {
 }
 
 func (c Config) publicHost() string {
-	if c.PublicHost != "" {
-		return c.PublicHost
-	}
-	return "localhost"
+	return c.PublicHost
 }
 
 func (c Config) version() string {
