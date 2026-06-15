@@ -39,12 +39,12 @@ v1 中，UUID 就是访问凭证。任何知道该 UUID 的人，都可以用运
 
 这个方式只使用 GitHub Release 中已经编译好的公网服务器压缩包，不需要在本地安装 Go，也不需要本地编译。
 
-从 [latest release](https://github.com/qinyongliang/gosshd/releases/latest) 选择和公网服务器系统/CPU 匹配的压缩包。下面示例使用 `linux-amd64` 和 `v0.1.1`；使用其它版本或平台时替换对应值即可。
+从 [latest release](https://github.com/qinyongliang/gosshd/releases/latest) 选择和公网服务器系统/CPU 匹配的压缩包。下面示例使用 `linux-amd64` 和 `v0.1.2`；使用其它版本或平台时替换对应值即可。
 
 启动公网服务器：
 
 ```sh
-VERSION=v0.1.1
+VERSION=v0.1.2
 PLATFORM=linux-amd64
 curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
 tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
@@ -52,7 +52,7 @@ cd "gosshd-${PLATFORM}"
 sudo ./gosshd-server --http-listen :80 --ssh-listen :22 --public-host public-host
 ```
 
-Release 的 server 压缩包已经内置 `dist/agent` 下载目录，因此私有网络机器可以直接访问正在运行的 `gosshd-server`，由服务器自动下发匹配平台的 agent。
+普通 server 压缩包不会内置全部 agent。私有网络机器访问正在运行的 `gosshd-server` 时，server 会按需从相同 GitHub Release 下载匹配平台的 agent，缓存到系统临时目录，并转发给安装脚本。如果直连 GitHub 下载失败或速度低于 100 KB/s，会自动改用 `https://gh-proxy.com/` 重试。
 
 在私有网络的 Linux/macOS 主机上启动 agent：
 
@@ -101,7 +101,9 @@ $env:GOOS='windows'; $env:GOARCH='amd64'; go build -o dist/agent/windows/amd64/g
 Remove-Item Env:\GOOS,Env:\GOARCH
 ```
 
-Release 包由 GitHub Actions 在创建 GitHub Release 时自动构建，覆盖 Linux、Windows、macOS、FreeBSD 等常见系统和 CPU 架构。每个 server 压缩包都会内置 `dist/agent`，供 `/install.sh`、`/install.ps1` 和 `/download/agent/{goos}/{goarch}` 使用。
+Release 包由 GitHub Actions 在创建 GitHub Release 时自动构建，覆盖 Linux、Windows、macOS、FreeBSD 等常见系统和 CPU 架构。
+
+普通 server 压缩包较轻量，`/download/agent/{goos}/{goarch}` 被访问时会从相同 GitHub Release 代理下载 agent 并缓存。`full` 压缩包会内置 `dist/agent`，适合离线或受限网络部署。
 
 ## 运行
 
@@ -116,16 +118,16 @@ bin/gosshd-agent.exe --server http://localhost:8080
 
 ## Docker 服务端
 
-使用 Alpine runtime 镜像构建 Linux 服务端镜像，并内置支持矩阵中的可下载 agent：
+构建轻量 Linux 服务端镜像。`VERSION` 需要设置为已经发布的 Release tag，这样 server 才能按对应版本代理下载 agent：
 
 ```powershell
-docker build -t gosshd-server:latest .
+docker build --build-arg VERSION=v0.1.2 -t gosshd-server:latest .
 ```
 
 本地高端口运行：
 
 ```powershell
-docker run --rm -p 8080:80 -p 2222:22 gosshd-server:latest --public-host localhost:8080 --http-listen :80 --ssh-listen :22 --agent-path /app/agent
+docker run --rm -p 8080:80 -p 2222:22 gosshd-server:latest --public-host localhost:8080 --http-listen :80 --ssh-listen :22
 ```
 
 公网主机默认端口运行：
@@ -134,7 +136,7 @@ docker run --rm -p 8080:80 -p 2222:22 gosshd-server:latest --public-host localho
 docker run -d --name gosshd-server --restart unless-stopped \
   -p 80:80 -p 22:22 \
   gosshd-server:latest \
-  --public-host your.host.name --http-listen :80 --ssh-listen :22 --agent-path /app/agent
+  --public-host your.host.name --http-listen :80 --ssh-listen :22
 ```
 
 如果宿主机的 SSH 管理服务也占用 `22`，建议先映射到高端口，例如 `-p 2222:22`。
