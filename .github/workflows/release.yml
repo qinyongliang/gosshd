@@ -18,65 +18,8 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }}
+    name: Build release archives
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            platform: linux-amd64
-          - goos: linux
-            goarch: arm64
-            platform: linux-arm64
-          - goos: linux
-            goarch: 386
-            platform: linux-386
-          - goos: linux
-            goarch: arm
-            goarm: "6"
-            platform: linux-armv6
-          - goos: linux
-            goarch: arm
-            goarm: "7"
-            platform: linux-armv7
-          - goos: linux
-            goarch: riscv64
-            platform: linux-riscv64
-          - goos: windows
-            goarch: amd64
-            platform: windows-amd64
-          - goos: windows
-            goarch: arm64
-            platform: windows-arm64
-          - goos: windows
-            goarch: 386
-            platform: windows-386
-          - goos: darwin
-            goarch: amd64
-            platform: darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            platform: darwin-arm64
-          - goos: freebsd
-            goarch: amd64
-            platform: freebsd-amd64
-          - goos: freebsd
-            goarch: arm64
-            platform: freebsd-arm64
-          - goos: openbsd
-            goarch: amd64
-            platform: openbsd-amd64
-          - goos: openbsd
-            goarch: arm64
-            platform: openbsd-arm64
-          - goos: netbsd
-            goarch: amd64
-            platform: netbsd-amd64
-          - goos: netbsd
-            goarch: arm64
-            platform: netbsd-arm64
 
     steps:
       - name: Checkout
@@ -88,77 +31,107 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build binaries
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
+      - name: Build binaries and packages
         shell: bash
         run: |
           set -euo pipefail
-          suffix=""
-          if [ "$GOOS" = "windows" ]; then
-            suffix=".exe"
-          fi
-          platform="${{ matrix.platform }}"
-          mkdir -p "build/gosshd-${platform}"
-          env_args=(CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH")
-          if [ -n "${GOARM:-}" ]; then
-            env_args+=(GOARM="$GOARM")
-          fi
-          env "${env_args[@]}" go build -trimpath -ldflags="-s -w" -o "build/gosshd-${platform}/gosshd-server${suffix}" ./cmd/gosshd-server
-          env "${env_args[@]}" go build -trimpath -ldflags="-s -w" -o "build/gosshd-${platform}/gosshd-agent${suffix}" ./cmd/gosshd-agent
 
-      - name: Package archive
-        shell: bash
-        run: |
-          set -euo pipefail
           version="${GITHUB_REF_NAME}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             version="${{ inputs.version }}"
           fi
-          platform="${{ matrix.platform }}"
-          cp README.md README.zh-CN.md "build/gosshd-${platform}/"
-          cp LICENSE* "build/gosshd-${platform}/" 2>/dev/null || true
-          mkdir -p dist
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            (cd build && zip -9 -r "../dist/gosshd-${version}-${platform}.zip" "gosshd-${platform}")
-          else
-            tar -C build -czf "dist/gosshd-${version}-${platform}.tar.gz" "gosshd-${platform}"
-          fi
 
-      - name: Upload artifact
+          platforms=(
+            "linux amd64 - linux-amd64 amd64"
+            "linux arm64 - linux-arm64 arm64"
+            "linux 386 - linux-386 386"
+            "linux arm 6 linux-armv6 armv6"
+            "linux arm 7 linux-armv7 armv7"
+            "linux riscv64 - linux-riscv64 riscv64"
+            "windows amd64 - windows-amd64 amd64"
+            "windows arm64 - windows-arm64 arm64"
+            "windows 386 - windows-386 386"
+            "darwin amd64 - darwin-amd64 amd64"
+            "darwin arm64 - darwin-arm64 arm64"
+            "freebsd amd64 - freebsd-amd64 amd64"
+            "freebsd arm64 - freebsd-arm64 arm64"
+            "openbsd amd64 - openbsd-amd64 amd64"
+            "openbsd arm64 - openbsd-arm64 arm64"
+            "netbsd amd64 - netbsd-amd64 amd64"
+            "netbsd arm64 - netbsd-arm64 arm64"
+          )
+
+          build_go() {
+            goos="$1"
+            goarch="$2"
+            goarm="$3"
+            output="$4"
+            package="$5"
+            env_args=(CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")
+            if [ "$goarm" != "-" ]; then
+              env_args+=(GOARM="$goarm")
+            fi
+            env "${env_args[@]}" go build -trimpath -ldflags="-s -w" -o "$output" "$package"
+          }
+
+          mkdir -p build/server build/dist/agent dist
+
+          for item in "${platforms[@]}"; do
+            read -r goos goarch goarm platform agent_arch <<< "$item"
+            suffix=""
+            if [ "$goos" = "windows" ]; then
+              suffix=".exe"
+            fi
+
+            server_dir="build/server/$platform"
+            agent_dir="build/dist/agent/$goos/$agent_arch"
+            mkdir -p "$server_dir" "$agent_dir"
+
+            echo "building server $platform"
+            build_go "$goos" "$goarch" "$goarm" "$server_dir/gosshd-server$suffix" ./cmd/gosshd-server
+
+            echo "building agent $platform"
+            build_go "$goos" "$goarch" "$goarm" "$agent_dir/gosshd-agent$suffix" ./cmd/gosshd-agent
+          done
+
+          for item in "${platforms[@]}"; do
+            read -r goos _ _ platform _ <<< "$item"
+            suffix=""
+            if [ "$goos" = "windows" ]; then
+              suffix=".exe"
+            fi
+
+            package_dir="package/gosshd-$platform"
+            mkdir -p "$package_dir"
+            cp "build/server/$platform/gosshd-server$suffix" "$package_dir/"
+            cp -R build/dist "$package_dir/"
+            cp README.md README.zh-CN.md "$package_dir/"
+            cp LICENSE* "$package_dir/" 2>/dev/null || true
+
+            if [ "$goos" = "windows" ]; then
+              (cd package && zip -9 -r "../dist/gosshd-$version-$platform.zip" "gosshd-$platform")
+            else
+              tar -C package -czf "dist/gosshd-$version-$platform.tar.gz" "gosshd-$platform"
+            fi
+            rm -rf "$package_dir"
+          done
+
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gosshd-${{ matrix.platform }}
+          name: gosshd-release-archives
           path: dist/*
 
-  publish:
-    name: Publish release assets
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Generate checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum * > checksums.txt
-
-      - name: Upload assets
+      - name: Upload release assets
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
           generate_release_notes: true
           files: |
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
+

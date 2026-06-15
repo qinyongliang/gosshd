@@ -37,14 +37,14 @@ v1 中，UUID 就是访问凭证。任何知道该 UUID 的人，都可以用运
 
 ## 快速使用 GitHub Release 产物
 
-这个方式只使用 GitHub Release 中已经编译好的压缩包，不需要在本地安装 Go，也不需要本地编译。
+这个方式只使用 GitHub Release 中已经编译好的公网服务器压缩包，不需要在本地安装 Go，也不需要本地编译。
 
-从 [latest release](https://github.com/qinyongliang/gosshd/releases/latest) 选择和机器系统/CPU 匹配的压缩包。下面示例使用 `linux-amd64` 和 `v0.1.0`；使用其它版本或平台时替换对应值即可。
+从 [latest release](https://github.com/qinyongliang/gosshd/releases/latest) 选择和公网服务器系统/CPU 匹配的压缩包。下面示例使用 `linux-amd64` 和 `v0.1.1`；使用其它版本或平台时替换对应值即可。
 
 启动公网服务器：
 
 ```sh
-VERSION=v0.1.0
+VERSION=v0.1.1
 PLATFORM=linux-amd64
 curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
 tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
@@ -52,27 +52,18 @@ cd "gosshd-${PLATFORM}"
 sudo ./gosshd-server --http-listen :80 --ssh-listen :22 --public-host public-host
 ```
 
+Release 的 server 压缩包已经内置 `dist/agent` 下载目录，因此私有网络机器可以直接访问正在运行的 `gosshd-server`，由服务器自动下发匹配平台的 agent。
+
 在私有网络的 Linux/macOS 主机上启动 agent：
 
 ```sh
-VERSION=v0.1.0
-PLATFORM=linux-amd64
-curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
-tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
-cd "gosshd-${PLATFORM}"
-./gosshd-agent --server http://public-host
+curl http://public-host/install.sh | sh
 ```
 
 在私有网络的 Windows 主机上启动 agent：
 
 ```powershell
-$Version = "v0.1.0"
-$Platform = "windows-amd64"
-$Archive = "gosshd-$Version-$Platform.zip"
-Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/qinyongliang/gosshd/releases/download/$Version/$Archive" -OutFile $Archive
-Expand-Archive -Force $Archive .
-Set-Location "gosshd-$Platform"
-.\gosshd-agent.exe --server "http://public-host"
+irm http://public-host/install.ps1 | iex
 ```
 
 Agent 启动后会打印类似地址：
@@ -110,7 +101,7 @@ $env:GOOS='windows'; $env:GOARCH='amd64'; go build -o dist/agent/windows/amd64/g
 Remove-Item Env:\GOOS,Env:\GOARCH
 ```
 
-Release 包由 GitHub Actions 在创建 GitHub Release 时自动构建，覆盖 Linux、Windows、macOS、FreeBSD 等常见系统和 CPU 架构。
+Release 包由 GitHub Actions 在创建 GitHub Release 时自动构建，覆盖 Linux、Windows、macOS、FreeBSD 等常见系统和 CPU 架构。每个 server 压缩包都会内置 `dist/agent`，供 `/install.sh`、`/install.ps1` 和 `/download/agent/{goos}/{goarch}` 使用。
 
 ## 运行
 
