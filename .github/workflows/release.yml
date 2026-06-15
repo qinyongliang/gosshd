@@ -66,15 +66,16 @@ jobs:
             goarch="$2"
             goarm="$3"
             output="$4"
-            package="$5"
+            ldflags_extra="$5"
+            package="$6"
             env_args=(CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")
             if [ "$goarm" != "-" ]; then
               env_args+=(GOARM="$goarm")
             fi
-            env "${env_args[@]}" go build -trimpath -ldflags="-s -w" -o "$output" "$package"
+            env "${env_args[@]}" go build -trimpath -ldflags="-s -w $ldflags_extra" -o "$output" "$package"
           }
 
-          mkdir -p build/server build/dist/agent dist
+          mkdir -p build/server build/agent dist
 
           for item in "${platforms[@]}"; do
             read -r goos goarch goarm platform agent_arch <<< "$item"
@@ -84,14 +85,15 @@ jobs:
             fi
 
             server_dir="build/server/$platform"
-            agent_dir="build/dist/agent/$goos/$agent_arch"
+            agent_dir="build/agent/$goos/$agent_arch"
             mkdir -p "$server_dir" "$agent_dir"
 
             echo "building server $platform"
-            build_go "$goos" "$goarch" "$goarm" "$server_dir/gosshd-server$suffix" ./cmd/gosshd-server
+            build_go "$goos" "$goarch" "$goarm" "$server_dir/gosshd-server$suffix" "-X main.version=$version" ./cmd/gosshd-server
 
             echo "building agent $platform"
-            build_go "$goos" "$goarch" "$goarm" "$agent_dir/gosshd-agent$suffix" ./cmd/gosshd-agent
+            build_go "$goos" "$goarch" "$goarm" "$agent_dir/gosshd-agent$suffix" "" ./cmd/gosshd-agent
+            cp "$agent_dir/gosshd-agent$suffix" "dist/gosshd-agent-$version-$goos-$agent_arch$suffix"
           done
 
           for item in "${platforms[@]}"; do
@@ -102,18 +104,26 @@ jobs:
             fi
 
             package_dir="package/gosshd-$platform"
+            full_package_dir="package/gosshd-$version-$platform-full"
             mkdir -p "$package_dir"
             cp "build/server/$platform/gosshd-server$suffix" "$package_dir/"
-            cp -R build/dist "$package_dir/"
             cp README.md README.zh-CN.md "$package_dir/"
             cp LICENSE* "$package_dir/" 2>/dev/null || true
 
+            mkdir -p "$full_package_dir"
+            cp -R "$package_dir/." "$full_package_dir/"
+            mkdir -p "$full_package_dir/dist/agent"
+            cp -R build/agent/. "$full_package_dir/dist/agent/"
+
             if [ "$goos" = "windows" ]; then
               (cd package && zip -9 -r "../dist/gosshd-$version-$platform.zip" "gosshd-$platform")
+              (cd package && zip -9 -r "../dist/gosshd-$version-$platform-full.zip" "gosshd-$version-$platform-full")
             else
               tar -C package -czf "dist/gosshd-$version-$platform.tar.gz" "gosshd-$platform"
+              tar -C package -czf "dist/gosshd-$version-$platform-full.tar.gz" "gosshd-$version-$platform-full"
             fi
             rm -rf "$package_dir"
+            rm -rf "$full_package_dir"
           done
 
           (cd dist && sha256sum * > checksums.txt)
@@ -133,5 +143,5 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.zip
+            dist/gosshd-agent-*
             dist/checksums.txt
-
