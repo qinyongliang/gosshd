@@ -1,1 +1,147 @@
-name: Releaseon:  push:    tags:      - "v*"  release:    types: [published]  workflow_dispatch:    inputs:      version:        description: Version label used in archive names when run manually        required: false        default: manualpermissions:  contents: writejobs:  build:    name: Build release archives    runs-on: ubuntu-latest    steps:      - name: Checkout        uses: actions/checkout@v4      - name: Set up Go        uses: actions/setup-go@v5        with:          go-version-file: go.mod          cache: true      - name: Build binaries and packages        shell: bash        run: |          set -euo pipefail          version="${GITHUB_REF_NAME}"          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then            version="${{ inputs.version }}"          fi          platforms=(            "linux amd64 - linux-amd64 amd64"            "linux arm64 - linux-arm64 arm64"            "linux 386 - linux-386 386"            "linux arm 6 linux-armv6 armv6"            "linux arm 7 linux-armv7 armv7"            "linux riscv64 - linux-riscv64 riscv64"            "windows amd64 - windows-amd64 amd64"            "windows arm64 - windows-arm64 arm64"            "windows 386 - windows-386 386"            "darwin amd64 - darwin-amd64 amd64"            "darwin arm64 - darwin-arm64 arm64"            "freebsd amd64 - freebsd-amd64 amd64"            "freebsd arm64 - freebsd-arm64 arm64"            "openbsd amd64 - openbsd-amd64 amd64"            "openbsd arm64 - openbsd-arm64 arm64"            "netbsd amd64 - netbsd-amd64 amd64"            "netbsd arm64 - netbsd-arm64 arm64"          )          build_go() {            goos="$1"            goarch="$2"            goarm="$3"            output="$4"            ldflags_extra="$5"            package="$6"            env_args=(CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")            if [ "$goarm" != "-" ]; then              env_args+=(GOARM="$goarm")            fi            env "${env_args[@]}" go build -trimpath -ldflags="-s -w $ldflags_extra" -o "$output" "$package"          }          mkdir -p build/server build/agent dist          for item in "${platforms[@]}"; do            read -r goos goarch goarm platform agent_arch <<< "$item"            suffix=""            if [ "$goos" = "windows" ]; then              suffix=".exe"            fi            server_dir="build/server/$platform"            agent_dir="build/agent/$goos/$agent_arch"            mkdir -p "$server_dir" "$agent_dir"            echo "building server $platform"            build_go "$goos" "$goarch" "$goarm" "$server_dir/gosshd-server$suffix" "-X main.version=$version" ./cmd/gosshd-server            echo "building agent $platform"            build_go "$goos" "$goarch" "$goarm" "$agent_dir/gosshd-agent$suffix" "" ./cmd/gosshd-agent            cp "$agent_dir/gosshd-agent$suffix" "dist/gosshd-agent-$version-$goos-$agent_arch$suffix"          done          for item in "${platforms[@]}"; do            read -r goos _ _ platform _ <<< "$item"            suffix=""            if [ "$goos" = "windows" ]; then              suffix=".exe"            fi            package_dir="package/gosshd-$platform"            full_package_dir="package/gosshd-$version-$platform-full"            mkdir -p "$package_dir"            cp "build/server/$platform/gosshd-server$suffix" "$package_dir/"            cp README.md README.zh-CN.md run.sh run.ps1 "$package_dir/"            cp LICENSE* "$package_dir/" 2>/dev/null || true            mkdir -p "$full_package_dir"            cp -R "$package_dir/." "$full_package_dir/"            mkdir -p "$full_package_dir/dist/agent"            cp -R build/agent/. "$full_package_dir/dist/agent/"            if [ "$goos" = "windows" ]; then              (cd package && zip -9 -r "../dist/gosshd-$version-$platform.zip" "gosshd-$platform")              (cd package && zip -9 -r "../dist/gosshd-$version-$platform-full.zip" "gosshd-$version-$platform-full")            else              tar -C package -czf "dist/gosshd-$version-$platform.tar.gz" "gosshd-$platform"              tar -C package -czf "dist/gosshd-$version-$platform-full.tar.gz" "gosshd-$version-$platform-full"            fi            rm -rf "$package_dir"            rm -rf "$full_package_dir"          done          (cd dist && sha256sum * > checksums.txt)      - name: Upload workflow artifacts        uses: actions/upload-artifact@v4        with:          name: gosshd-release-archives          path: dist/*      - name: Upload release assets        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')        uses: softprops/action-gh-release@v2        with:          tag_name: ${{ github.event.release.tag_name || github.ref_name }}          generate_release_notes: true          files: |            dist/*.tar.gz            dist/*.zip            dist/gosshd-agent-*            dist/checksums.txt
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label used in archive names when run manually
+        required: false
+        default: manual
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build release archives
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries and packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          fi
+
+          platforms=(
+            "linux amd64 - linux-amd64 amd64"
+            "linux arm64 - linux-arm64 arm64"
+            "linux 386 - linux-386 386"
+            "linux arm 6 linux-armv6 armv6"
+            "linux arm 7 linux-armv7 armv7"
+            "linux riscv64 - linux-riscv64 riscv64"
+            "windows amd64 - windows-amd64 amd64"
+            "windows arm64 - windows-arm64 arm64"
+            "windows 386 - windows-386 386"
+            "darwin amd64 - darwin-amd64 amd64"
+            "darwin arm64 - darwin-arm64 arm64"
+            "freebsd amd64 - freebsd-amd64 amd64"
+            "freebsd arm64 - freebsd-arm64 arm64"
+            "openbsd amd64 - openbsd-amd64 amd64"
+            "openbsd arm64 - openbsd-arm64 arm64"
+            "netbsd amd64 - netbsd-amd64 amd64"
+            "netbsd arm64 - netbsd-arm64 arm64"
+          )
+
+          build_go() {
+            goos="$1"
+            goarch="$2"
+            goarm="$3"
+            output="$4"
+            ldflags_extra="$5"
+            package="$6"
+            env_args=(CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")
+            if [ "$goarm" != "-" ]; then
+              env_args+=(GOARM="$goarm")
+            fi
+            env "${env_args[@]}" go build -trimpath -ldflags="-s -w $ldflags_extra" -o "$output" "$package"
+          }
+
+          mkdir -p build/server build/agent dist
+
+          for item in "${platforms[@]}"; do
+            read -r goos goarch goarm platform agent_arch <<< "$item"
+            suffix=""
+            if [ "$goos" = "windows" ]; then
+              suffix=".exe"
+            fi
+
+            server_dir="build/server/$platform"
+            agent_dir="build/agent/$goos/$agent_arch"
+            mkdir -p "$server_dir" "$agent_dir"
+
+            echo "building server $platform"
+            build_go "$goos" "$goarch" "$goarm" "$server_dir/gosshd-server$suffix" "-X main.version=$version" ./cmd/gosshd-server
+
+            echo "building agent $platform"
+            build_go "$goos" "$goarch" "$goarm" "$agent_dir/gosshd-agent$suffix" "" ./cmd/gosshd-agent
+            cp "$agent_dir/gosshd-agent$suffix" "dist/gosshd-agent-$version-$goos-$agent_arch$suffix"
+          done
+
+          for item in "${platforms[@]}"; do
+            read -r goos _ _ platform _ <<< "$item"
+            suffix=""
+            if [ "$goos" = "windows" ]; then
+              suffix=".exe"
+            fi
+
+            package_dir="package/gosshd-$platform"
+            full_package_dir="package/gosshd-$version-$platform-full"
+            mkdir -p "$package_dir"
+            cp "build/server/$platform/gosshd-server$suffix" "$package_dir/"
+            cp README.md README.zh-CN.md run.sh run.ps1 "$package_dir/"
+            cp LICENSE* "$package_dir/" 2>/dev/null || true
+
+            mkdir -p "$full_package_dir"
+            cp -R "$package_dir/." "$full_package_dir/"
+            mkdir -p "$full_package_dir/dist/agent"
+            cp -R build/agent/. "$full_package_dir/dist/agent/"
+
+            if [ "$goos" = "windows" ]; then
+              (cd package && zip -9 -r "../dist/gosshd-$version-$platform.zip" "gosshd-$platform")
+              (cd package && zip -9 -r "../dist/gosshd-$version-$platform-full.zip" "gosshd-$version-$platform-full")
+            else
+              tar -C package -czf "dist/gosshd-$version-$platform.tar.gz" "gosshd-$platform"
+              tar -C package -czf "dist/gosshd-$version-$platform-full.tar.gz" "gosshd-$version-$platform-full"
+            fi
+            rm -rf "$package_dir"
+            rm -rf "$full_package_dir"
+          done
+
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosshd-release-archives
+          path: dist/*
+
+      - name: Upload release assets
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/gosshd-agent-*
+            dist/checksums.txt

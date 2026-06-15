@@ -1,1 +1,46 @@
-package serverimport (	"net/http"	"net/http/httptest"	"strings"	"testing")func TestRunSHUsesRunDownloadFlow(t *testing.T) {	app := NewApp(Config{PublicHost: "relay.example.com", AgentToken: "secret"})	req := httptest.NewRequest(http.MethodGet, "http://relay.example.com/run.sh", nil)	rec := httptest.NewRecorder()	app.runSH(rec, req)	body := rec.Body.String()	if rec.Code != http.StatusOK {		t.Fatalf("unexpected status %d", rec.Code)	}	if !strings.Contains(body, "http://relay.example.com/download/agent/${os}/${arch}") {		t.Fatalf("run.sh did not include agent download URL:\n%s", body)	}	if !strings.Contains(body, `exec "$tmp" --server "http://relay.example.com" --token "secret"`) {		t.Fatalf("run.sh did not execute agent with expected server/token:\n%s", body)	}}func TestRunPS1UsesRunDownloadFlow(t *testing.T) {	app := NewApp(Config{PublicHost: "relay.example.com"})	req := httptest.NewRequest(http.MethodGet, "http://relay.example.com/run.ps1", nil)	rec := httptest.NewRecorder()	app.runPS1(rec, req)	body := rec.Body.String()	if rec.Code != http.StatusOK {		t.Fatalf("unexpected status %d", rec.Code)	}	if !strings.Contains(body, `$url = "http://relay.example.com/download/agent/windows/$arch"`) {		t.Fatalf("run.ps1 did not include agent download URL:\n%s", body)	}	if !strings.Contains(body, `& $tmp --server "http://relay.example.com"`) {		t.Fatalf("run.ps1 did not execute agent with expected server:\n%s", body)	}}
+package server
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestRunSHUsesRunDownloadFlow(t *testing.T) {
+	app := NewApp(Config{PublicHost: "relay.example.com", AgentToken: "secret"})
+	req := httptest.NewRequest(http.MethodGet, "http://relay.example.com/run.sh", nil)
+	rec := httptest.NewRecorder()
+
+	app.runSH(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if !strings.Contains(body, "http://relay.example.com/download/agent/${os}/${arch}") {
+		t.Fatalf("run.sh did not include agent download URL:\n%s", body)
+	}
+	if !strings.Contains(body, `exec "$tmp" --server "http://relay.example.com" --token "secret"`) {
+		t.Fatalf("run.sh did not execute agent with expected server/token:\n%s", body)
+	}
+}
+
+func TestRunPS1UsesRunDownloadFlow(t *testing.T) {
+	app := NewApp(Config{PublicHost: "relay.example.com"})
+	req := httptest.NewRequest(http.MethodGet, "http://relay.example.com/run.ps1", nil)
+	rec := httptest.NewRecorder()
+
+	app.runPS1(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if !strings.Contains(body, `$url = "http://relay.example.com/download/agent/windows/$arch"`) {
+		t.Fatalf("run.ps1 did not include agent download URL:\n%s", body)
+	}
+	if !strings.Contains(body, `& $tmp --server "http://relay.example.com"`) {
+		t.Fatalf("run.ps1 did not execute agent with expected server:\n%s", body)
+	}
+}
