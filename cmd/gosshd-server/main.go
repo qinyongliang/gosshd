@@ -11,6 +11,8 @@ import (
 	"github.com/qinyongliang/gosshd/internal/server"
 )
 
+var version = server.DefaultVersion
+
 func main() {
 	var cfg server.Config
 	flag.StringVar(&cfg.HTTPListen, "http-listen", ":80", "HTTP listen address")
@@ -18,6 +20,10 @@ func main() {
 	flag.StringVar(&cfg.PublicHost, "public-host", "", "public host used in install scripts and printed SSH addresses")
 	flag.StringVar(&cfg.AgentToken, "agent-token", "", "optional shared token required from agents")
 	flag.StringVar(&cfg.AgentPath, "agent-path", "dist/agent", "directory containing agent binaries by goos/goarch")
+	flag.StringVar(&cfg.AgentCachePath, "agent-cache-path", "", "directory used to cache downloaded agent binaries")
+	flag.StringVar(&cfg.Version, "version", version, "release version used when proxy-downloading agent binaries")
+	flag.StringVar(&cfg.ReleaseBaseURL, "release-base-url", "", "base URL for release downloads")
+	flag.StringVar(&cfg.ReleaseProxyURL, "release-proxy-url", "", "fallback proxy prefix for slow or failed release downloads")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
