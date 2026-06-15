@@ -10,6 +10,90 @@ ssh UUID@public-host
 
 v1 中，UUID 就是访问凭证。任何知道该 UUID 的人，都可以用运行 `gosshd-agent` 的系统用户权限访问 agent 所在机器。
 
+## 架构
+
+```text
+                         standard SSH / SFTP / SCP / tunnels
+  +------------------+   ssh UUID@public-host    +----------------------+
+  | SSH client       | -------------------------> | gosshd-server        |
+  | anywhere         |                            | public network       |
+  +------------------+                            | HTTP :80 / SSH :22   |
+                                                  +----------+-----------+
+                                                             ^
+                                                             |
+                                      outbound WebSocket     |
+                                      + yamux streams        |
+                                                             |
+                                                  +----------+-----------+
+                                                  | gosshd-agent         |
+                                                  | private network      |
+                                                  | shell / SFTP / TCP   |
+                                                  +----------+-----------+
+                                                             |
+                                                  +----------v-----------+
+                                                  | private host         |
+                                                  +----------------------+
+```
+
+## 快速使用 GitHub Release 产物
+
+这个方式只使用 GitHub Release 中已经编译好的压缩包，不需要在本地安装 Go，也不需要本地编译。
+
+从 [latest release](https://github.com/qinyongliang/gosshd/releases/latest) 选择和机器系统/CPU 匹配的压缩包。下面示例使用 `linux-amd64` 和 `v0.1.0`；使用其它版本或平台时替换对应值即可。
+
+启动公网服务器：
+
+```sh
+VERSION=v0.1.0
+PLATFORM=linux-amd64
+curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
+tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
+cd "gosshd-${PLATFORM}"
+sudo ./gosshd-server --http-listen :80 --ssh-listen :22 --public-host public-host
+```
+
+在私有网络的 Linux/macOS 主机上启动 agent：
+
+```sh
+VERSION=v0.1.0
+PLATFORM=linux-amd64
+curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
+tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
+cd "gosshd-${PLATFORM}"
+./gosshd-agent --server http://public-host
+```
+
+在私有网络的 Windows 主机上启动 agent：
+
+```powershell
+$Version = "v0.1.0"
+$Platform = "windows-amd64"
+$Archive = "gosshd-$Version-$Platform.zip"
+Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/qinyongliang/gosshd/releases/download/$Version/$Archive" -OutFile $Archive
+Expand-Archive -Force $Archive .
+Set-Location "gosshd-$Platform"
+.\gosshd-agent.exe --server "http://public-host"
+```
+
+Agent 启动后会打印类似地址：
+
+```text
+ssh UUID@public-host
+```
+
+然后可以在任意网络中访问：
+
+```sh
+ssh UUID@public-host
+sftp UUID@public-host
+scp file UUID@public-host:/tmp/file
+ssh -L 15432:127.0.0.1:5432 UUID@public-host
+ssh -D 1080 UUID@public-host
+ssh -R 0:127.0.0.1:8080 UUID@public-host
+```
+
+如果公网服务器把 gosshd SSH 映射到了非默认端口，需要增加 `-p`/`-P`，例如 `ssh -p 2222 UUID@public-host`。
+
 ## 构建
 
 ```powershell

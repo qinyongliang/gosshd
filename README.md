@@ -6,6 +6,90 @@
 
 The UUID is the v1 access secret. Anyone who knows it can access the agent machine with the permissions of the running `gosshd-agent` process.
 
+## Architecture
+
+```text
+                         standard SSH / SFTP / SCP / tunnels
+  +------------------+   ssh UUID@public-host    +----------------------+
+  | SSH client       | -------------------------> | gosshd-server        |
+  | anywhere         |                            | public network       |
+  +------------------+                            | HTTP :80 / SSH :22   |
+                                                  +----------+-----------+
+                                                             ^
+                                                             |
+                                      outbound WebSocket     |
+                                      + yamux streams        |
+                                                             |
+                                                  +----------+-----------+
+                                                  | gosshd-agent         |
+                                                  | private network      |
+                                                  | shell / SFTP / TCP   |
+                                                  +----------+-----------+
+                                                             |
+                                                  +----------v-----------+
+                                                  | private host         |
+                                                  +----------------------+
+```
+
+## Quick Start From GitHub Releases
+
+This path uses prebuilt GitHub Release archives only. No local Go toolchain or local build is required.
+
+Pick the archive that matches each machine from the [latest release](https://github.com/qinyongliang/gosshd/releases/latest). The examples below use `linux-amd64` and `v0.1.0`; replace them when using a different release or platform.
+
+Start the public server:
+
+```sh
+VERSION=v0.1.0
+PLATFORM=linux-amd64
+curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
+tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
+cd "gosshd-${PLATFORM}"
+sudo ./gosshd-server --http-listen :80 --ssh-listen :22 --public-host public-host
+```
+
+Start an agent on a private-network Linux/macOS host:
+
+```sh
+VERSION=v0.1.0
+PLATFORM=linux-amd64
+curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
+tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
+cd "gosshd-${PLATFORM}"
+./gosshd-agent --server http://public-host
+```
+
+Start an agent on a private-network Windows host:
+
+```powershell
+$Version = "v0.1.0"
+$Platform = "windows-amd64"
+$Archive = "gosshd-$Version-$Platform.zip"
+Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/qinyongliang/gosshd/releases/download/$Version/$Archive" -OutFile $Archive
+Expand-Archive -Force $Archive .
+Set-Location "gosshd-$Platform"
+.\gosshd-agent.exe --server "http://public-host"
+```
+
+The agent prints an address like:
+
+```text
+ssh UUID@public-host
+```
+
+Then connect from anywhere:
+
+```sh
+ssh UUID@public-host
+sftp UUID@public-host
+scp file UUID@public-host:/tmp/file
+ssh -L 15432:127.0.0.1:5432 UUID@public-host
+ssh -D 1080 UUID@public-host
+ssh -R 0:127.0.0.1:8080 UUID@public-host
+```
+
+If the public server maps gosshd SSH to a non-default port, add `-p`/`-P`, for example `ssh -p 2222 UUID@public-host`.
+
 ## Build
 
 ```powershell
