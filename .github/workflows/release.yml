@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - "v*"
   release:
     types: [published]
   workflow_dispatch:
@@ -134,7 +137,7 @@ jobs:
     name: Publish release assets
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
 
     steps:
       - name: Download artifacts
@@ -153,6 +156,8 @@ jobs:
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             dist/*.tar.gz
             dist/*.zip
