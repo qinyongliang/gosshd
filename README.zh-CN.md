@@ -33,6 +33,12 @@ curl -fsSL https://raw.githubusercontent.com/qinyongliang/gosshd/main/run.sh | \
   sudo sh -s -- --http-listen :80 --ssh-listen :22 --public-host public-host
 ```
 
+Windows：
+
+```powershell
+& ([scriptblock]::Create((iwr -UseBasicParsing https://raw.githubusercontent.com/qinyongliang/gosshd/main/run.ps1).Content)) --http-listen :80 --ssh-listen :22 --public-host public-host
+```
+
 在私有网络的 Linux/macOS 主机上启动 agent：
 
 ```sh
