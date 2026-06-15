@@ -35,12 +35,12 @@ The UUID is the v1 access secret. Anyone who knows it can access the agent machi
 
 This path uses prebuilt GitHub Release archives for the public server. No local Go toolchain or local build is required.
 
-Pick the server archive that matches the public server from the [latest release](https://github.com/qinyongliang/gosshd/releases/latest). The examples below use `linux-amd64` and `v0.1.1`; replace them when using a different release or platform.
+Pick the server archive that matches the public server from the [latest release](https://github.com/qinyongliang/gosshd/releases/latest). The examples below use `linux-amd64` and `v0.1.2`; replace them when using a different release or platform.
 
 Start the public server:
 
 ```sh
-VERSION=v0.1.1
+VERSION=v0.1.2
 PLATFORM=linux-amd64
 curl -fSLO "https://github.com/qinyongliang/gosshd/releases/download/${VERSION}/gosshd-${VERSION}-${PLATFORM}.tar.gz"
 tar -xzf "gosshd-${VERSION}-${PLATFORM}.tar.gz"
@@ -48,7 +48,7 @@ cd "gosshd-${PLATFORM}"
 sudo ./gosshd-server --http-listen :80 --ssh-listen :22 --public-host public-host
 ```
 
-The release server archive includes the agent download tree under `dist/agent`, so private-network machines can install the correct agent directly from your running `gosshd-server`.
+The normal server archive downloads agent binaries from the same GitHub Release on demand, caches them under the system temp directory, and serves them through your running `gosshd-server`. If the direct GitHub download is slower than 100 KB/s or fails, the server retries through `https://gh-proxy.com/`.
 
 Start an agent on a private-network Linux/macOS host:
 
@@ -97,7 +97,9 @@ $env:GOOS='windows'; $env:GOARCH='amd64'; go build -o dist/agent/windows/amd64/g
 Remove-Item Env:\GOOS,Env:\GOARCH
 ```
 
-Release archives are built by GitHub Actions when a GitHub Release is created, covering common Linux, Windows, macOS, FreeBSD, OpenBSD, and NetBSD CPU architectures. Each server archive includes `dist/agent` binaries used by `/install.sh`, `/install.ps1`, and `/download/agent/{goos}/{goarch}`.
+Release archives are built by GitHub Actions when a GitHub Release is created, covering common Linux, Windows, macOS, FreeBSD, OpenBSD, and NetBSD CPU architectures.
+
+Normal server archives are lightweight and proxy-download agent binaries from the same GitHub Release when `/download/agent/{goos}/{goarch}` is requested. `full` archives include `dist/agent` for offline or restricted-network deployments.
 
 ## Run
 
@@ -112,16 +114,16 @@ Production defaults are configurable and default to `:80` for HTTP and `:22` for
 
 ## Docker Server
 
-Build a Linux server image with downloadable agents for the supported OS/CPU matrix:
+Build a lightweight Linux server image. Set `VERSION` to a published release tag so the server can proxy-download matching agent binaries:
 
 ```powershell
-docker build -t gosshd-server:latest .
+docker build --build-arg VERSION=v0.1.2 -t gosshd-server:latest .
 ```
 
 Run locally on high ports:
 
 ```powershell
-docker run --rm -p 8080:80 -p 2222:22 gosshd-server:latest --public-host localhost:8080 --http-listen :80 --ssh-listen :22 --agent-path /app/agent
+docker run --rm -p 8080:80 -p 2222:22 gosshd-server:latest --public-host localhost:8080 --http-listen :80 --ssh-listen :22
 ```
 
 Run on a public host with default ports:
@@ -130,7 +132,7 @@ Run on a public host with default ports:
 docker run -d --name gosshd-server --restart unless-stopped \
   -p 80:80 -p 22:22 \
   gosshd-server:latest \
-  --public-host your.host.name --http-listen :80 --ssh-listen :22 --agent-path /app/agent
+  --public-host your.host.name --http-listen :80 --ssh-listen :22
 ```
 
 If host SSH already uses port `22`, map the relay SSH port to a high port first, for example `-p 2222:22`.
